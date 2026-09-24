@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SnitchList — whose phone is it anyway</title>
+<style>
+:root{--bg:#0b0e13;--panel:#12161d;--line:#232a36;--txt:#d7dee9;--dim:#8b96a8;--red:#ff5d5d;--amber:#ffb454;--green:#5dff8f;--blue:#6cb8ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:1.6rem;margin:0 0 4px}
+.sub{color:var(--dim);margin:0 0 16px;font-size:.95rem}
+.offline{display:inline-block;background:#12351f;color:var(--green);border:1px solid #1f5c33;border-radius:6px;padding:4px 10px;font-size:.8rem;margin-bottom:16px}
+textarea{width:100%;min-height:150px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:center}
+button{background:#1d6ff2;border:none;color:#fff;padding:10px 18px;border-radius:8px;font-size:.95rem;cursor:pointer}
+button:hover{background:#2b7fff}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+button.ghost:hover{border-color:var(--blue)}
+button.small{padding:4px 10px;font-size:.8rem;border-radius:6px}
+button.snitchbtn{background:transparent;border:1px solid var(--red);color:var(--red)}
+button.cleanbtn{background:transparent;border:1px solid var(--green);color:var(--green)}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--dim);margin:12px 0;cursor:pointer;font-size:.9rem}
+.drop:hover{border-color:var(--blue);color:var(--txt)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:20px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card .n{font-size:1.5rem;font-weight:700}
+.card .l{color:var(--dim);font-size:.8rem}
+.card.red .n{color:var(--red)}.card.amber .n{color:var(--amber)}.card.green .n{color:var(--green)}.card.blue .n{color:var(--blue)}
+table{width:100%;border-collapse:collapse;font-size:.88rem;margin:8px 0 24px}
+th{text-align:left;color:var(--dim);font-weight:600;border-bottom:1px solid var(--line);padding:8px}
+td{border-bottom:1px solid var(--line);padding:8px;vertical-align:top}
+td.dom{font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.num{text-align:right}
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.75rem;white-space:nowrap}
+.tag.ads{background:#3a1420;color:var(--red)}
+.tag.tracking{background:#3a1420;color:var(--red)}
+.tag.analytics{background:#3a2c10;color:var(--amber)}
+.tag.consent{background:#3a2c10;color:var(--amber)}
+.tag.crash{background:#2c2340;color:#c9a6ff}
+.tag.social{background:#12283a;color:var(--blue)}
+.tag.functional{background:#12351f;color:var(--green)}
+.tag.unknown{background:#222a36;color:var(--dim)}
+.tag.you-snitch{background:#3a1420;color:var(--red)}
+.tag.you-clean{background:#12351f;color:var(--green)}
+h2{margin-top:28px;font-size:1.15rem}
+.hint{color:var(--dim);font-size:.85rem}
+#results{display:none}
+footer{margin-top:40px;color:var(--dim);font-size:.8rem;border-top:1px solid var(--line);padding-top:12px}
+.ackbar{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>SnitchList</h1>
+<p class="sub">Paste a NextDNS, TrackerControl, or DNS log. Find out who's snitching.</p>
+<div class="offline">100% offline &mdash; nothing you paste ever leaves this page. No trackers, obviously.</div>
+
+<textarea id="log" placeholder="Paste log lines here...&#10;&#10;2026-09-21 14:02:11  t.uptodown.app  A  blocked&#10;2026-09-21 14:02:12  graph.facebook.com  A  allowed"></textarea>
+
+<div class="drop" id="drop">or drop a log file here / tap to choose one<input type="file" id="file" accept=".txt,.csv,.log,.json" style="display:none"></div>
+
+<div class="row">
+<button id="analyze">Analyze</button>
+<button class="ghost" id="sample">Load sample</button>
+<button class="ghost" id="clear">Clear</button>
+<button class="ghost" id="export" style="display:none">Export report</button>
+</div>
+<p class="hint">Tip: NextDNS &gt; Logs &gt; copy a chunk of lines, or download the CSV. TrackerControl can share its log too.</p>
+
+<div id="results">
+<div class="cards" id="cards"></div>
+
+<h2>Snitches <span class="hint" id="snitchcount"></span></h2>
+<table id="snitchtable"><thead><tr><th>Domain</th><th class="num">Hits</th><th>Company</th><th>Type</th></tr></thead><tbody></tbody></table>
+
+<h2>Unknowns &mdash; your call <span class="hint" id="unkcount"></span></h2>
+<p class="hint">Not in the database. Mark them and SnitchList remembers <em>your</em> verdicts on this device.</p>
+<table id="unktable"><thead><tr><th>Domain</th><th class="num">Hits</th><th>Verdict</th></tr></thead><tbody></tbody></table>
+
+<h2>Your marked domains</h2>
+<table id="markedtable"><thead><tr><th>Domain</th><th>Your verdict</th><th></th></tr></thead><tbody></tbody></table>
+
+<h2>Company rollup</h2>
+<table id="companytable"><thead><tr><th>Company</th><th class="num">Domains</th><th class="num">Hits</th></tr></thead><tbody></tbody></table>
+
+<h2>Clean / functional</h2>
+<p class="hint" id="cleancount"></p>
+<table id="cleantable" style="display:none"><thead><tr><th>Domain</th><th class="num">Hits</th><th>Note</th></tr></thead><tbody></tbody></table>
+<div class="row"><button class="ghost small" id="toggleclean">show / hide</button></div>
+</div>
+
+<footer>SnitchList v1 &mdash; built for the runtime-log methodology. Database is a starting point, not gospel: verify, then mark.<br>Free software under GPL-3.0 &mdash; run it offline, host it anywhere, contribute back.</footer>
+</div>
+<script>
+/* Tracker database: [domain suffix, company, category]
+   Categories: ads, analytics, tracking, crash, consent, social, functional */
+const DB = [
+["t.uptodown.app","Uptodown","tracking"],
+["inmobi.com","InMobi","ads"],
+["inmobi-choice.io","InMobi","consent"],
+["bat.bing.com","Microsoft","ads"],
+["clarity.ms","Microsoft","analytics"],
+["pixel-config.reddit.com","Reddit","ads"],
+["alb.reddit.com","Reddit","ads"],
+["firebaselogging.googleapis.com","Google","analytics"],
+["firebaseinstallations.googleapis.com","Google","analytics"],
+["firebase-settings.crashlytics.com","Google","crash"],
+["doubleclick.net","Google","ads"],
+["googlesyndication.com","Google","ads"],
+["googleadservices.com","Google","ads"],
+["google-analytics.com","Google","analytics"],
+["googletagmanager.com","Google","analytics"],
+["app-measurement.com","Google","analytics"],
+["admob.com","Google","ads"],
+["adsense.com","Google","ads"],
+["adservice.google.com","Google","ads"],
+["crashlytics.com","Google","crash"],
+["graph.facebook.com","Meta","social"],
+["connect.facebook.net","Meta","social"],
+["facebook.net","Meta","social"],
+["b-www.facebook.com","Meta","social"],
+["analytics.facebook.com","Meta","analytics"],
+["hatch-api.meta.ai","Meta","functional"],
+["hatch.metaaivm.com","Meta","functional"],
+["applovin.com","AppLovin","ads"],
+["unityads.unity3d.com","Unity","ads"],
+["ironsrc.com","ironSource","ads"],
+["supersonicads.com","ironSource","ads"],
+["vungle.com","Liftoff","ads"],
+["chartboost.com","Chartboost","ads"],
+["criteo.com","Criteo","ads"],
+["amazon-adsystem.com","Amazon","ads"],
+["aax.amazon-adsystem.com","Amazon","ads"],
+["sentry.io","Sentry","crash"],
+["mixpanel.com","Mixpanel","analytics"],
+["amplitude.com","Amplitude","analytics"],
+["segment.io","Segment","analytics"],
+["cdn.segment.com","Segment","analytics"],
+["branch.io","Branch","analytics"],
+["appsflyer.com","AppsFlyer","tracking"],
+["adjust.com","Adjust","tracking"],
+["kochava.com","Kochava","tracking"],
+["singular.net","Singular","tracking"],
+["tenjin.com","Tenjin","tracking"],
+["newrelic.com","New Relic","analytics"],
+["hotjar.com","Hotjar","analytics"],
+["fullstory.com","FullStory","analytics"],
+["tealiumiq.com","Tealium","tracking"],
+["optimizely.com","Optimizely","analytics"],
+["onesignal.com","OneSignal","tracking"],
+["pendo.io","Pendo","analytics"],
+["intercom.io","Intercom","functional"],
+["intercomcdn.com","Intercom","functional"],
+["analytics.tiktok.com","TikTok","analytics"],
+["sc-analytics.appspot.com","Snap","analytics"],
+["ads-twitter.com","X","ads"],
+["analytics.twitter.com","X","analytics"],
+["ads.linkedin.com","LinkedIn","ads"],
+["px.ads.linkedin.com","LinkedIn","ads"],
+["analytics.pinterest.com","Pinterest","analytics"],
+["scorecardresearch.com","Comscore","analytics"],
+["quantserve.com","Quantcast","analytics"],
+["quantcast.com","Quantcast","analytics"],
+["imrworldwide.com","Nielsen","analytics"],
+["bluekai.com","Oracle","tracking"],
+["eloqua.com","Oracle","tracking"],
+["pardot.com","Salesforce","tracking"],
+["demdex.net","Adobe","tracking"],
+["omtrdc.net","Adobe","analytics"],
+["everesttech.net","Adobe","tracking"],
+["adsrvr.org","The Trade Desk","ads"],
+["mathtag.com","MediaMath","ads"],
+["pubmatic.com","PubMatic","ads"],
+["rubiconproject.com","Rubicon","ads"],
+["openx.net","OpenX","ads"],
+["casalemedia.com","Index Exchange","ads"],
+["adnxs.com","AppNexus","ads"],
+["outbrain.com","Outbrain","ads"],
+["taboola.com","Taboola","ads"],
+["revcontent.com","Revcontent","ads"],
+["doubleverify.com","DoubleVerify","tracking"],
+["adsafeprotected.com","Integral Ad Science","tracking"],
+["moatads.com","Oracle","tracking"],
+["samsungads.com","Samsung","ads"],
+["config.samsungads.com","Samsung","ads"],
+["mistat.xiaomi.com","Xiaomi","analytics"],
+["data.mistat.xiaomi.com","Xiaomi","analytics"],
+["tracking.miui.com","Xiaomi","analytics"],
+["nextdns.io","NextDNS","functional"],
+["metrics.apple.com","Apple","analytics"]
+];
+const SKIP_TLDS = new Set(["txt","log","csv","json","html","htm","xml","pdf","png","jpg","jpeg","gif","webp","mp4","zip","apk","md","js","css"]);
+
+/* ---------- verdicts (his calls, stored on-device) ---------- */
+const VKEY = "snitchlist_verdicts_v1";
+function getVerdicts(){ try { return JSON.parse(localStorage.getItem(VKEY) || "{}"); } catch(e){ return {}; } }
+function saveVerdicts(v){ localStorage.setItem(VKEY, JSON.stringify(v)); }
+
+/* ---------- parsing ---------- */
+function extractDomains(text){
+  const counts = {};
+  const re = /\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})\b/gi;
+  let m;
+  while((m = re.exec(text)) !== null){
+    const d = m[1].toLowerCase();
+    const tld = d.split(".").pop();
+    if(SKIP_TLDS.has(tld)) continue;
+    if(/^\d+\.\d+\.\d+\.\d+$/.test(d)) continue;
+    counts[d] = (counts[d] || 0) + 1;
+  }
+  return counts;
+}
+function lookup(domain){
+  for(const [suf, company, cat] of DB){
+    if(domain === suf || domain.endsWith("." + suf)) return {company, cat, matched:suf};
+  }
+  return null;
+}
+
+/* ---------- analysis ---------- */
+let lastReport = "";
+function analyze(){
+  const text = document.getElementById("log").value;
+  if(!text.trim()){ alert("Paste some log lines first."); return; }
+  const counts = extractDomains(text);
+  const verdicts = getVerdicts();
+  const snitches = [], unknowns = [], clean = [];
+  const companies = {};
+  let totalHits = 0;
+
+  for(const [domain, hits] of Object.entries(counts)){
+    totalHits += hits;
+    if(verdicts[domain] === "snitch"){ snitches.push({domain, hits, company:"(your verdict)", cat:"you-snitch"}); bump(companies,"(your verdicts)",hits); continue; }
+    if(verdicts[domain] === "clean"){ clean.push({domain, hits, note:"marked clean by you"}); continue; }
+    const hit = lookup(domain);
+    if(hit){
+      if(hit.cat === "functional"){ clean.push({domain, hits, note:hit.company + " infrastructure"}); }
+      else { snitches.push({domain, hits, company:hit.company, cat:hit.cat}); bump(companies, hit.company, hits); }
+    } else {
+      unknowns.push({domain, hits});
+    }
+  }
+  function bump(obj,k,hits){ obj[k] = obj[k] || {domains:0, hits:0}; obj[k].domains++; obj[k].hits += hits; }
+
+  snitches.sort((a,b)=>b.hits-a.hits);
+  unknowns.sort((a,b)=>b.hits-a.hits);
+  clean.sort((a,b)=>b.hits-a.hits);
+
+  /* cards */
+  document.getElementById("cards").innerHTML =
+    card(totalHits,"total DNS hits","blue") +
+    card(Object.keys(counts).length,"unique domains","") +
+    card(snitches.length,"snitch domains","red") +
+    card(unknowns.length,"unknowns","amber") +
+    card(clean.length,"clean / functional","green");
+
+  /* snitch table */
+  document.getElementById("snitchcount").textContent = "— " + snitches.length + " domains";
+  tbody("snitchtable", snitches.map(s =>
+    `<tr><td class="dom">${esc(s.domain)}</td><td class="num">${s.hits}</td><td>${esc(s.company)}</td><td><span class="tag ${s.cat}">${label(s.cat)}</span></td></tr>`).join("")
+    || `<tr><td colspan="4" class="hint">None found. Either it's clean or the database doesn't know them yet — check unknowns.</td></tr>`);
+
+  /* unknowns */
+  document.getElementById("unkcount").textContent = "— " + unknowns.length + " domains";
+  tbody("unktable", unknowns.map(u =>
+    `<tr><td class="dom">${esc(u.domain)}</td><td class="num">${u.hits}</td><td><div class="ackbar"><button class="small snitchbtn" data-d="${esc(u.domain)}" data-v="snitch">snitch</button><button class="small cleanbtn" data-d="${esc(u.domain)}" data-v="clean">clean</button></div></td></tr>`).join("")
+    || `<tr><td colspan="3" class="hint">Nothing unknown. The database covered everything.</td></tr>`);
+
+  /* marked */
+  const marked = Object.entries(verdicts).sort();
+  tbody("markedtable", marked.map(([d,v]) =>
+    `<tr><td class="dom">${esc(d)}</td><td><span class="tag ${v==="snitch"?"you-snitch":"you-clean"}">${v==="snitch"?"snitch":"clean"}</span></td><td><button class="small ghost" data-unmark="${esc(d)}">forget</button></td></tr>`).join("")
+    || `<tr><td colspan="3" class="hint">You haven't marked anything yet.</td></tr>`);
+
+  /* companies */
+  const coRows = Object.entries(companies).sort((a,b)=>b[1].hits-a[1].hits);
+  tbody("companytable", coRows.map(([c,s]) =>
+    `<tr><td>${esc(c)}</td><td class="num">${s.domains}</td><td class="num">${s.hits}</td></tr>`).join("")
+    || `<tr><td colspan="3" class="hint">No flagged companies.</td></tr>`);
+
+  /* clean */
+  document.getElementById("cleancount").textContent = clean.length + " domains look clean or are known-good infrastructure.";
+  tbody("cleantable", clean.map(c =>
+    `<tr><td class="dom">${esc(c.domain)}</td><td class="num">${c.hits}</td><td class="hint">${esc(c.note)}</td></tr>`).join(""));
+
+  document.getElementById("results").style.display = "block";
+  document.getElementById("export").style.display = "";
+  document.getElementById("results").scrollIntoView({behavior:"smooth"});
+
+  /* report for export */
+  let r = "# SnitchList report\n\n";
+  r += `- Total DNS hits: ${totalHits}\n- Unique domains: ${Object.keys(counts).length}\n- Snitch domains: ${snitches.length}\n- Unknown: ${unknowns.length}\n\n## Snitches\n`;
+  for(const s of snitches) r += `- ${s.domain} (${s.hits} hits) — ${s.company} [${s.cat}]\n`;
+  r += "\n## Unknowns\n";
+  for(const u of unknowns) r += `- ${u.domain} (${u.hits} hits)\n`;
+  lastReport = r;
+}
+function card(n,l,cls){ return `<div class="card ${cls}"><div class="n">${n}</div><div class="l">${l}</div></div>`; }
+function tbody(id, html){ document.querySelector("#"+id+" tbody").innerHTML = html; }
+function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function label(cat){
+  return {ads:"ads",analytics:"analytics",tracking:"tracking",crash:"crash reporting",consent:"consent/ad infra",social:"social tracker",functional:"functional","you-snitch":"your verdict: snitch","you-clean":"your verdict: clean"}[cat] || cat;
+}
+
+/* ---------- events ---------- */
+document.getElementById("analyze").addEventListener("click", analyze);
+document.getElementById("clear").addEventListener("click", () => {
+  document.getElementById("log").value = "";
+  document.getElementById("results").style.display = "none";
+  document.getElementById("export").style.display = "none";
+});
+document.getElementById("sample").addEventListener("click", () => {
+  document.getElementById("log").value =
+`2026-09-21 14:02:11  t.uptodown.app  A  blocked
+2026-09-21 14:02:12  graph.facebook.com  A  allowed
+2026-09-21 14:02:13  firebaselogging.googleapis.com  A  allowed
+2026-09-21 14:02:14  bat.bing.com  A  allowed
+2026-09-21 14:02:15  pixel-config.reddit.com  A  allowed
+2026-09-21 14:02:16  alb.reddit.com  A  allowed
+2026-09-21 14:02:17  inmobi-choice.io  A  blocked
+2026-09-21 14:02:18  sentry.io  A  allowed
+2026-09-21 14:02:19  app-measurement.com  A  allowed
+2026-09-21 14:02:20  connectivitycheck.gstatic.com  A  allowed
+2026-09-21 14:02:21  play.googleapis.com  A  allowed
+2026-09-21 14:02:22  some-mystery-domain-4821.xyz  A  allowed`;
+  analyze();
+});
+document.getElementById("toggleclean").addEventListener("click", () => {
+  const t = document.getElementById("cleantable");
+  t.style.display = t.style.display === "none" ? "" : "none";
+});
+document.getElementById("export").addEventListener("click", () => {
+  const blob = new Blob([lastReport], {type:"text/markdown"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "snitchlist-report.md";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+});
+
+/* file drop */
+const drop = document.getElementById("drop"), fileInput = document.getElementById("file");
+drop.addEventListener("click", ()=>fileInput.click());
+fileInput.addEventListener("change", ()=>{ if(fileInput.files[0]) readFile(fileInput.files[0]); });
+["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();}));
+drop.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); });
+function readFile(f){
+  const r = new FileReader();
+  r.onload = ()=>{ document.getElementById("log").value = r.result; analyze(); };
+  r.readAsText(f);
+}
+
+/* verdict buttons (event delegation) */
+document.addEventListener("click", e=>{
+  const b = e.target.closest("button[data-d]");
+  if(b){
+    const v = getVerdicts();
+    v[b.dataset.d] = b.dataset.v;
+    saveVerdicts(v);
+    analyze();
+    return;
+  }
+  const u = e.target.closest("button[data-unmark]");
+  if(u){
+    const v = getVerdicts();
+    delete v[u.dataset.unmark];
+    saveVerdicts(v);
+    analyze();
+  }
+});
+</script>
+</div>
+</body>
+</html>
