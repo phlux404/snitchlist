@@ -4,6 +4,8 @@
 
 Paste a NextDNS, TrackerControl, or DNS log. Find out who's snitching.
 
+*Built with assistance from [Muse](https://muse.ai) — Meta's personal AI.*
+
 ## Privacy
 
 100% client-side. The whole thing is a single HTML file — no server, no analytics,
