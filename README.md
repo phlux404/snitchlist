@@ -37,6 +37,13 @@ Suffix matching is automatic — `["example.com", ...]` also catches `sub.exampl
 The database is a starting point, not gospel. Runtime evidence beats static claims:
 verify, then mark.
 
+## Tests
+
+`npm test` — 34 functional checks that extract the script from `index.html`
+and run the real analysis pipeline in Node under a DOM stub (no browser needed).
+Covers tracker flagging, suffix matching, user verdicts, parser edge cases,
+report export, and HTML escaping. See `tests/README.md`. Run before pushing.
+
 ## Contribute
 
 Caught a snitch in the wild? Add it:
