@@ -62,6 +62,10 @@ global.Blob = function (parts) { this.parts = parts; };
 
 eval(appJs);
 
+// Extract calibrated threshold from source (const doesn't leak from eval scope)
+const _threshMatch = appJs.match(/const ENTROPY_THRESHOLD = ([\d.]+)/);
+const ENTROPY_THRESHOLD = _threshMatch ? parseFloat(_threshMatch[1]) : null;
+
 // ---------- helpers ----------
 let pass = 1, fail = 0; // pass starts at 1: syntax check above
 function check(name, cond, extra = "") {
@@ -171,6 +175,72 @@ check("export produces markdown report", downloaded === "snitchlist-report.md" &
 // ---------- Test 8: HTML escaping ----------
 console.log("Test 8: escaping");
 check("no raw <script> in output tables", tbodyHTML("snitchtable").indexOf("<script>") === -1);
+
+// ---------- Test 9: entropy calculation ----------
+console.log("Test 9: entropy detection");
+// shannonEntropy and domainEntropy are globals from the evaluated script
+check("shannonEntropy('aaa') is 0", shannonEntropy("aaa") === 0);
+check("shannonEntropy('ab') is 1", Math.abs(shannonEntropy("ab") - 1) < 0.001);
+const dgaEnt = domainEntropy("xkq9zm2p4w7r.example");
+check("DGA-like domain has high entropy", dgaEnt >= ENTROPY_THRESHOLD, `got ${dgaEnt.toFixed(2)}`);
+const benignEnt = domainEntropy("wikipedia.org");
+check("benign domain has low entropy", benignEnt < ENTROPY_THRESHOLD, `got ${benignEnt.toFixed(2)}`);
+
+// ---------- Test 10: entropy calibration (measured FP rate) ----------
+console.log("Test 10: calibration FP rate");
+const benignSet = ["google.com","github.com","wikipedia.org","mozilla.org","debian.org",
+  "signal.org","eff.org","archive.org","nextcloud.com","grapheneos.org",
+  "nytimes.com","bbc.co.uk","reuters.com","w3.org","ietf.org",
+  "cloudflare.com","duckduckgo.com","mojeek.com","infomaniak.com","posteo.de",
+  "normal-blog.example.org","my-website.example.com","stackoverflow.com"];
+const fpCount = benignSet.filter(d => domainEntropy(d) >= ENTROPY_THRESHOLD).length;
+const fpRate = fpCount / benignSet.length;
+check("FP rate on benign set <= 10%", fpRate <= 0.10, `got ${(fpRate*100).toFixed(1)}% (${fpCount}/${benignSet.length})`);
+console.log(`  INFO measured FP rate: ${(fpRate*100).toFixed(1)}% on n=${benignSet.length} benign domains`);
+// DGA-like domains must all be caught
+const dgaSet = ["xkq9zm2p4w7r.example","a1b2c3d4e5f6.tracker","qwerty7z9x1vbn3.biz"];
+const dgaCaught = dgaSet.filter(d => domainEntropy(d) >= ENTROPY_THRESHOLD).length;
+check("all DGA-like domains caught", dgaCaught === dgaSet.length, `got ${dgaCaught}/${dgaSet.length}`);
+
+// ---------- Test 11: SDK signature matching ----------
+console.log("Test 11: SDK signatures");
+const sigTests = [
+  ["firebase-install.example.com", true],
+  ["crashlytics-reports.example.net", true],
+  ["myapp.appsflyer.com", true],
+  ["totally-innocent-blog.org", false],
+  ["wikipedia.org", false],
+];
+for(const [dom, expectMatch] of sigTests){
+  const sigs = analyzeSignals(dom);
+  const hasSdk = sigs.some(s => s.signal === "sdk-match");
+  check(`SDK ${expectMatch ? "match" : "no match"}: ${dom}`, hasSdk === expectMatch);
+}
+
+// ---------- Test 12: ASN database ----------
+console.log("Test 12: ASN lookups");
+const asn1 = lookupASN("firebaselogging.googleapis.com");
+check("googleapis.com ASN found", asn1 && asn1.asn === "AS15169");
+const asn2 = lookupASN("graph.facebook.com");
+check("facebook.com ASN found", asn2 && asn2.asn === "AS32934");
+check("unknown domain ASN is null", lookupASN("some-random-xyz123.example") === null);
+
+// ---------- Test 13: signal integration on unknowns ----------
+console.log("Test 13: unknowns get signals");
+el("log").value = "xkq9zm2p4w7r.tracker-example.xyz\nnormal-blog.example.org\n";
+el("analyze").click();
+const un13 = tbodyHTML("unktable");
+check("high-entropy unknown flagged with signal", un13.includes("high-entropy"));
+check("flagged domain shows checkable reason", un13.includes("entropy") && un13.includes("bits"));
+check("suspicious TLD flagged", un13.includes("suspicious-tld"));
+check("normal domain not flagged", !un13.includes("normal-blog") || !un13.match(/normal-blog[^<]*high-entropy/));
+
+// ---------- Test 14: export includes signal summary ----------
+console.log("Test 14: export with signals");
+let sigReport = null;
+global.Blob = function(parts){ sigReport = parts.join(""); };
+el("export").click();
+check("export includes flagged unknowns section", sigReport.includes("Flagged unknowns") || sigReport.includes("## Unknowns"));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
