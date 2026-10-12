@@ -21,7 +21,7 @@ from datetime import datetime, timezone, timedelta
 
 HOME = os.path.expanduser("~")
 API_KEY_FILE = os.path.join(HOME, ".config", "nextdns", "api_key")
-NCNOTES = os.path.join(HOME, "bin", "ncnotes.py")
+NOTES_DIR = "/mnt/data/next-drive/Notes"
 API = "https://api.nextdns.io"
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
 
@@ -324,16 +324,17 @@ def main():
         return
 
     title = args.notes_title or f"SnitchScan {date_short}"
-    # Write via ncnotes.py
-    import subprocess
-    p = subprocess.run([sys.executable, NCNOTES, "write", title, report],
-                       capture_output=True, text=True)
-    if p.returncode != 0:
-        print(f"ncnotes failed: {p.stderr}", file=sys.stderr)
-        # Fallback: print report
+    # Write directly to Nextcloud Notes sync folder
+    if not os.path.isdir(NOTES_DIR):
+        print(f"Notes dir not found: {NOTES_DIR}", file=sys.stderr)
         print(report)
         sys.exit(1)
-    print(f"Wrote note: {title}", file=sys.stderr)
+    # Sanitize title for filename
+    safe = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
+    out_path = os.path.join(NOTES_DIR, f"{safe}.md")
+    with open(out_path, 'w') as f:
+        f.write(report)
+    print(f"Wrote: {out_path}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
