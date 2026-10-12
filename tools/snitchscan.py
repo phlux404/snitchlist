@@ -11,7 +11,9 @@ Config:
   Uses ~/bin/ncnotes.py for Nextcloud Notes (shares ncnotify config).
 
 Usage:
-  snitchscan.py [--hours 24] [--profile cbd449] [--dry-run]
+  snitchscan.py [--hours 24] [--profile <profile_id>] [--dry-run]
+
+  Profile ID can also be set via ~/.config/nextdns/profile_id
 """
 import os, sys, re, json, math, argparse
 import urllib.request, urllib.error
@@ -286,10 +288,23 @@ def build_report(entries, hours):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hours", type=int, default=24)
-    ap.add_argument("--profile", default="cbd449")
+    ap.add_argument("--profile", default=None,
+                    help="NextDNS profile ID (or set ~/.config/nextdns/profile_id)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--notes-title", default=None)
     args = ap.parse_args()
+
+    # Profile ID from arg, config file, or fail
+    profile_id = args.profile
+    if not profile_id:
+        pid_file = os.path.join(HOME, ".config", "nextdns", "profile_id")
+        if os.path.exists(pid_file):
+            with open(pid_file) as f:
+                profile_id = f.read().strip()
+    if not profile_id:
+        print("No profile ID: pass --profile or create ~/.config/nextdns/profile_id",
+              file=sys.stderr)
+        sys.exit(1)
 
     if not os.path.exists(API_KEY_FILE):
         print(f"Missing {API_KEY_FILE} — create it with your NextDNS API key (chmod 600)",
@@ -299,7 +314,7 @@ def main():
         api_key = f.read().strip()
 
     print(f"Fetching {args.hours}h of logs...", file=sys.stderr)
-    entries = fetch_logs(api_key, args.profile, args.hours)
+    entries = fetch_logs(api_key, profile_id, args.hours)
     print(f"Got {len(entries)} log entries", file=sys.stderr)
 
     report, date_short = build_report(entries, args.hours)
